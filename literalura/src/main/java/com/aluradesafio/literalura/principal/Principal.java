@@ -1,9 +1,8 @@
 package com.aluradesafio.literalura.principal;
 
 //import com.aluradesafio.literalura.model.Datos;
-import com.aluradesafio.literalura.model.Datos;
-import com.aluradesafio.literalura.model.DatosLibro;
-import com.aluradesafio.literalura.model.Libro;
+import com.aluradesafio.literalura.model.*;
+import com.aluradesafio.literalura.repository.AutorRepository;
 import com.aluradesafio.literalura.repository.LibroRepository;
 import com.aluradesafio.literalura.service.ConsumoAPILibro;
 import com.aluradesafio.literalura.service.ConvierteDatos;
@@ -17,18 +16,16 @@ public class Principal {
     private static final String URL_BASE = "https://gutendex.com/books/";
     private ConvierteDatos convierteDatos = new ConvierteDatos(); //llamamos la clase convierte datos
     private List<DatosLibro> datosLibro = new ArrayList<>();
-    private LibroRepository repositorio;
+    private LibroRepository libroRepository;
+    private AutorRepository autorRepository;
     private List<Libro> libros;
     private Optional<Libro> libroBuscado;
 
 
-    public Principal(LibroRepository repository) {
-        this.repositorio = repository;
+    public Principal(LibroRepository libroRepository, AutorRepository autorRepository) {
+        this.libroRepository = libroRepository;
+        this.autorRepository = autorRepository;
     }
-
-//    public Principal() {
-//
-//    }
 
     public void muestraElMenu(){
         var opcion = -1;
@@ -69,18 +66,49 @@ public class Principal {
         System.out.println("Escribe el nombre del libro que deseas buscar");
         var nombreLibro = teclado.nextLine();
         var json = consumoAPILibro.obtenerDatos(URL_BASE+"?search="+ nombreLibro.replace(" ", "+"));
-        System.out.println(json);
         Datos datos = convierteDatos.obtenerDatos(json, Datos.class);
         return datos;
     }
     private void buscarLibroWeb(){
-        Datos datos = getDatosLibro();
-        datos.resultados().stream().forEach(datosLibro -> {
-            Libro libro = new Libro(datosLibro.titulo(), "", "", datosLibro.descargas());
-            repositorio.save(libro);
-        });
+        try {
+            Datos datos = getDatosLibro();
+            DatosLibro datosLibro = datos.resultados().get(0);
+            DatosAutor datosAutor = datosLibro.autor().get(0);
+            Autor autor = saveAutor(datosAutor);
+            saveLibro(datosLibro, autor);
+        } catch (Exception ex) {
+            System.err.println(ex.getMessage());
+            System.out.println("Ya existe en la base de datos.");
+        }
+    }
 
-        System.out.println(datos);
+    private Autor saveAutor(DatosAutor datosAutor) {
+        Autor autor = null;
+        try {
+            autor = new Autor();
+            autor.setNombre(datosAutor.nombre());
+            autor.setFechaDeNacimiento(datosAutor.fechaDeNacimiento());
+            autor.setFechaDeFallecimiento(datosAutor.fechaDeFallecimiento());
+            autorRepository.save(autor);
+        } catch (Exception ex) {
+            System.out.println(ex.getMessage());
+        }
+        return autor;
+    }
+
+    private Libro saveLibro(DatosLibro datosLibro, Autor autor) {
+        Libro libro = null;
+        try {
+            libro = new Libro();
+            libro.setAutor(autor);
+            libro.setTitulo(datosLibro.titulo());
+            libro.setIdioma(datosLibro.idioma().get(0));
+            libro.setDescargas(datosLibro.descargas());
+            libroRepository.save(libro);
+        } catch(Exception ex) {
+            System.out.println(ex.getMessage());
+        }
+        return libro;
     }
 
     private void buscarLibroPorTitulo() {
@@ -103,7 +131,7 @@ public class Principal {
         System.out.println("Escribe el nombre del libro que deseas buscar");
         var nombreLibro = teclado.nextLine();
         //vamos a nuestra LibroRepository
-        libroBuscado = repositorio.findByTituloContainsIgnoreCase(nombreLibro);
+        libroBuscado = libroRepository.findByTituloContainsIgnoreCase(nombreLibro);
 
         if (libroBuscado.isPresent()){
             System.out.println("El libro buscado es: " +libroBuscado.get());
@@ -119,7 +147,7 @@ public class Principal {
 //                .sorted(Comparator.comparing(Libro::getTitulo))
 //                .forEach(System.out::println);
         System.out.println("Lista de libros registrados\n");
-        libros = repositorio.findAll();
+        libros = libroRepository.findAll();
         libros.stream()
                 .sorted(Comparator.comparing(Libro::getTitulo))
                 .forEach(System.out::println);
